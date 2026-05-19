@@ -3,205 +3,502 @@ import asyncio
 import json
 import os
 from dotenv import load_dotenv
-load_dotenv()
 import httpx
-from openai import OpenAI
+
+from openai import AsyncOpenAI
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from contextlib import AsyncExitStack
 
-st.set_page_config(page_title="MCP Multi-Source Agent", page_icon="🔌")
+# =========================================================
+# LOAD ENV
+# =========================================================
+
+load_dotenv()
+
+# =========================================================
+# STREAMLIT CONFIG
+# =========================================================
+
+st.set_page_config(
+    page_title="MCP Multi-Source Agent",
+    page_icon="🔌"
+)
+
 st.title("🔌 MCP Multi-Source Data Agent")
 
 st.markdown("""
-This AI agent uses the **Model Context Protocol (MCP)** to connect to 
-three independent tool servers: Weather, Exchange Rates, and News.
+This AI agent uses the **Model Context Protocol (MCP)** to connect to:
+
+- 🌤️ Weather Server
+- 💱 Exchange Server
+- 📰 News Server
 """)
 
 with st.sidebar:
+
     st.header("📡 Available MCP Servers")
+
     st.markdown("""
-    - 🌤️ **Weather Server** - `get_weather(city)`
-    - 💱 **Exchange Server** - `convert_currency(amount, from, to)`
-    - 📰 **News Server** - `get_top_headlines(country, category)`
-    """)
-    st.divider()
-    st.markdown("*Tools are auto-discovered via MCP's `list_tools()`*")
+- 🌤️ `get_weather(city)`
+- 💱 `convert_currency(amount, from, to)`
+- 📰 `get_top_headlines(country, category)`
+""")
+
+# =========================================================
+# MAIN QUERY FUNCTION
+# =========================================================
 
 async def process_query(user_query):
-    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not openrouter_api_key:
-        return "❌ Error: OPENROUTER_API_KEY not found in .env file."
 
-    client = OpenAI(
-        api_key=openrouter_api_key,
-        base_url="https://api.openrouter.ai/v1"
+    # =====================================================
+    # GEMINI API KEY
+    # =====================================================
+
+    gemini_api_key = os.environ.get(
+        "GEMINI_API_KEY"
     )
 
-    try:
-        test_resp = httpx.get(
-            "https://api.openrouter.ai/v1/models",
-            headers={"Authorization": f"Bearer {openrouter_api_key}"},
-            timeout=10.0,
+    if gemini_api_key:
+        gemini_api_key = gemini_api_key.strip()
+
+    if not gemini_api_key:
+        return "❌ GEMINI_API_KEY not found in .env"
+
+    # =====================================================
+    # GEMINI CLIENT
+    # =====================================================
+
+    provider = "Google Gemini"
+
+    client = AsyncOpenAI(
+        api_key=gemini_api_key,
+        base_url=(
+            "https://generativelanguage.googleapis.com/v1beta/openai/"
         )
-        st.info(f"OpenRouter connectivity test: {test_resp.status_code} {test_resp.reason_phrase}")
-    except httpx.ConnectError as e:
-        st.error("OpenRouter connectivity test failed: unable to resolve or connect to api.openrouter.ai.")
-        st.error("This looks like a Codespaces network/DNS restriction rather than a model issue.")
-        st.error(f"ConnectError: {e}")
-        return "❌ Cannot reach OpenRouter from this environment. Check Codespaces outbound network, DNS, or proxy settings."
-    except Exception as e:
-        st.error(f"OpenRouter connectivity test failed: {type(e).__name__}: {e}")
-        return f"❌ OpenRouter connectivity test failed: {type(e).__name__}: {e}"
+    )
 
-    openrouter_model = os.environ.get("OPENROUTER_MODEL") or "meta-llama/llama-3.3-70b-instruct:free"
+    provider_url = (
+        "https://generativelanguage.googleapis.com/v1beta/models"
+    )
+
     candidate_models = [
-        openrouter_model,
-        "gpt-4o-mini",
-        "gpt-4o",
-        "gpt-4o-rev",
-        "gpt-3.5-turbo",
-        "gpt-3.5-turbo-16k"
-    ]
-    candidate_models = [m for i, m in enumerate(candidate_models) if m not in candidate_models[:i]]
 
-    st.info(f"Using OpenRouter model: auto-detecting from {candidate_models[0]} first...")
-    
+        "gemini-2.5-flash",
+
+        "gemini-2.0-flash",
+
+        "gemini-1.5-flash"
+    ]
+
+    # =====================================================
+    # CONNECTIVITY TEST
+    # =====================================================
+
+    try:
+
+        async with httpx.AsyncClient(
+            timeout=15.0
+        ) as http_client:
+
+            response = await http_client.get(
+                provider_url,
+                headers={
+                    "x-goog-api-key":
+                    gemini_api_key
+                }
+            )
+
+        if response.status_code == 200:
+
+            st.success(
+                f"✅ {provider} connectivity OK"
+            )
+
+        else:
+
+            st.warning(
+                f"⚠️ {provider} returned "
+                f"HTTP {response.status_code}"
+            )
+
+            try:
+                st.json(response.json())
+            except:
+                st.write(response.text)
+
+    except Exception as e:
+
+        st.error(
+            f"{provider} connectivity failed"
+        )
+
+        st.error(str(e))
+
+        return (
+            f"❌ Cannot connect to {provider}"
+        )
+
+    # =====================================================
+    # MCP SERVERS
+    # =====================================================
+
     servers = {
-        "weather": StdioServerParameters(command="python3", args=["weather_server.py"]),
-        "exchange": StdioServerParameters(command="python3", args=["exchange_server.py"]),
-        "news": StdioServerParameters(command="python3", args=["news_server.py"]),
+
+        "weather": StdioServerParameters(
+            command="python",
+            args=["weather_server.py"]
+        ),
+
+        "exchange": StdioServerParameters(
+            command="python",
+            args=["exchange_server.py"]
+        ),
+
+        "news": StdioServerParameters(
+            command="python",
+            args=["news_server.py"]
+        ),
     }
-    
+
     openai_tools = []
     tool_to_session = {}
+
     exit_stack = AsyncExitStack()
-    
+
+    # =====================================================
+    # CONNECT TO MCP SERVERS
+    # =====================================================
+
     for server_name, server_params in servers.items():
+
         try:
-            st.info(f"Connecting to {server_name} server...")
-            
-            # Use AsyncExitStack for proper async context management
-            stdio_transport = await exit_stack.enter_async_context(stdio_client(server_params))
-            read, write = stdio_transport
-            
-            session = await exit_stack.enter_async_context(ClientSession(read, write))
+
+            st.info(
+                f"Connecting to {server_name} server..."
+            )
+
+            transport = (
+                await exit_stack.enter_async_context(
+                    stdio_client(server_params)
+                )
+            )
+
+            read, write = transport
+
+            session = (
+                await exit_stack.enter_async_context(
+                    ClientSession(read, write)
+                )
+            )
+
             await session.initialize()
-            
-            tools_response = await session.list_tools()
-            server_tools = tools_response.tools
-            st.success(f"✅ {server_name}: Found {len(server_tools)} tool(s)")
-            
-            for tool in server_tools:
+
+            tools_response = (
+                await session.list_tools()
+            )
+
+            st.success(
+                f"✅ {server_name}: "
+                f"{len(tools_response.tools)} tool(s)"
+            )
+
+            for tool in tools_response.tools:
+
                 openai_tools.append({
+
                     "type": "function",
+
                     "function": {
+
                         "name": tool.name,
-                        "description": tool.description or "",
-                        "parameters": tool.inputSchema
+
+                        "description":
+                        tool.description or "",
+
+                        "parameters":
+                        tool.inputSchema
                     }
                 })
-                tool_to_session[tool.name] = session
-                
+
+                tool_to_session[
+                    tool.name
+                ] = session
+
         except Exception as e:
-            st.warning(f"⚠️ Could not connect to {server_name}: {str(e)}")
-    
+
+            st.warning(
+                f"⚠️ Failed connecting "
+                f"to {server_name}: {e}"
+            )
+
     if not openai_tools:
+
         await exit_stack.aclose()
-        return "❌ No MCP servers are available."
-    
+
+        return "❌ No MCP tools available."
+
+    # =====================================================
+    # SYSTEM PROMPT
+    # =====================================================
+
+    SYSTEM_PROMPT = """
+You are an MCP-powered AI assistant.
+
+IMPORTANT RULES:
+
+1. For weather-related questions:
+   ALWAYS use the get_weather tool.
+
+2. For currency conversion:
+   ALWAYS use the convert_currency tool.
+
+3. For news or headlines:
+   ALWAYS use the get_top_headlines tool.
+
+4. NEVER answer weather, news,
+   or exchange questions from
+   your internal knowledge.
+
+5. ALWAYS prefer MCP tools
+   over internal knowledge.
+
+6. If a matching MCP tool exists,
+   you MUST call the tool first.
+
+7. After receiving tool output,
+   summarize it naturally for the user.
+"""
+
+    # =====================================================
+    # CHAT LOOP
+    # =====================================================
+
     try:
+
         messages = [
-            {"role": "system", "content": "You are a helpful assistant. Use the available tools to answer questions."},
-            {"role": "user", "content": user_query}
+
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            },
+
+            {
+                "role": "user",
+                "content": user_query
+            }
         ]
 
         response = None
-        last_error = None
-        model_errors = []
-        for candidate in candidate_models:
+        selected_model = None
+
+        # =================================================
+        # MODEL FALLBACK LOOP
+        # =================================================
+
+        for model_name in candidate_models:
+
             try:
-                st.info(f"Trying OpenRouter model: {candidate}")
-                response = client.chat.completions.create(
-                    model=candidate,
-                    messages=messages,
-                    tools=openai_tools,
-                    tool_choice="auto"
+
+                st.info(
+                    f"Trying model: {model_name}"
                 )
-                openrouter_model = candidate
+
+                response = (
+                    await client.chat.completions.create(
+
+                        model=model_name,
+
+                        messages=messages,
+
+                        tools=openai_tools,
+
+                        tool_choice="auto"
+                    )
+                )
+
+                selected_model = model_name
+
+                st.success(
+                    f"✅ Using model: "
+                    f"{selected_model}"
+                )
+
                 break
+
             except Exception as e:
-                error_info = f"{e.__class__.__name__}: {repr(e)}"
-                model_errors.append((candidate, error_info))
-                st.warning(f"Model {candidate} failed: {error_info}")
-                err_text = str(e).lower()
-                if "model not found" in err_text or "invalid argument" in err_text:
-                    last_error = e
-                    continue
-                raise
+
+                st.warning(
+                    f"⚠️ Model failed: "
+                    f"{model_name}\n\n{e}"
+                )
+
+                await asyncio.sleep(2)
 
         if response is None:
-            error_details = " | ".join([f"{m}: {err}" for m, err in model_errors])
-            raise RuntimeError(f"No valid OpenRouter model could be selected. Tried: {candidate_models}. Errors: {error_details}")
 
-        st.info(f"Using OpenRouter model: {openrouter_model}")
-        assistant_message = response.choices[0].message
-        
+            return "❌ All Gemini models failed."
+
+        assistant_message = (
+            response.choices[0].message
+        )
+
+        # =================================================
+        # TOOL LOOP
+        # =================================================
+
         while assistant_message.tool_calls:
-            st.info(f"🤖 Tool call in progress: {len(assistant_message.tool_calls)} tool(s)...")
+
             messages.append(assistant_message)
-            
-            for tool_call in assistant_message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
-                session = tool_to_session.get(tool_name)
-                
-                if session:
-                    result = await session.call_tool(tool_name, tool_args)
-                    tool_result_text = result.content[0].text
-                    st.success(f"✅ {tool_name}: {tool_result_text[:100]}...")
-                else:
-                    tool_result_text = f"Error: Tool '{tool_name}' not found."
-                
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": tool_result_text
-                })
-            
-            try:
-                response = client.chat.completions.create(
-                    model=openrouter_model,
-                    messages=messages
+
+            for tool_call in (
+                assistant_message.tool_calls
+            ):
+
+                tool_name = (
+                    tool_call.function.name
                 )
-                assistant_message = response.choices[0].message
-            except Exception as e:
-                error_info = f"{e.__class__.__name__}: {repr(e)}"
-                st.error(f"Follow-up chat call failed with {error_info}")
-                raise
-        
+
+                tool_args = json.loads(
+                    tool_call.function.arguments
+                )
+
+                # =========================================
+                # TOOL DEBUGGING
+                # =========================================
+
+                st.write(
+                    f"### 🔧 TOOL USED: {tool_name}"
+                )
+
+                st.json(tool_args)
+
+                session = tool_to_session.get(
+                    tool_name
+                )
+
+                # =========================================
+                # TOOL EXECUTION
+                # =========================================
+
+                if not session:
+
+                    tool_result_text = (
+                        f"Tool '{tool_name}' "
+                        f"not found."
+                    )
+
+                else:
+
+                    try:
+
+                        result = await session.call_tool(
+                            tool_name,
+                            tool_args
+                        )
+
+                        tool_result_text = "\n".join(
+
+                            getattr(c, "text", str(c))
+
+                            for c in result.content
+                        )
+
+                        st.success(
+                            f"✅ {tool_name} completed"
+                        )
+
+                        # =================================
+                        # SHOW RAW MCP RESPONSE
+                        # =================================
+
+                        st.code(
+                            tool_result_text,
+                            language="text"
+                        )
+
+                    except Exception as e:
+
+                        tool_result_text = (
+                            f"Tool execution error: {e}"
+                        )
+
+                messages.append({
+
+                    "role": "tool",
+
+                    "tool_call_id":
+                    tool_call.id,
+
+                    "content":
+                    tool_result_text
+                })
+
+            # =============================================
+            # FOLLOW-UP MODEL RESPONSE
+            # =============================================
+
+            response = (
+                await client.chat.completions.create(
+
+                    model=selected_model,
+
+                    messages=messages,
+
+                    tools=openai_tools,
+
+                    tool_choice="auto"
+                )
+            )
+
+            assistant_message = (
+                response.choices[0].message
+            )
+
         return assistant_message.content
-        
+
     finally:
-        # Properly close all connections
+
         await exit_stack.aclose()
 
-# UI
+# =========================================================
+# STREAMLIT UI
+# =========================================================
+
 user_input = st.text_input(
     "Ask me anything:",
-    placeholder="e.g., What's the weather in Tokyo, convert 100 USD to JPY, and show top tech news"
+    placeholder=(
+        "What's the weather in Tokyo?"
+    )
 )
 
-if st.button("Ask AI", type="primary"):
-    if user_input:
-        with st.spinner("Thinking..."):
-            try:
-                result = asyncio.run(process_query(user_input))
-                st.markdown("### Response:")
-                st.markdown(result)
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-                st.error(f"Exception type: {e.__class__.__name__}")
-                st.error(f"Exception repr: {repr(e)}")
+if st.button("Ask AI"):
+
+    if not user_input:
+
+        st.warning(
+            "Please enter a question."
+        )
+
     else:
-        st.warning("Please type a question first.")
+
+        with st.spinner("Thinking..."):
+
+            try:
+
+                loop = asyncio.new_event_loop()
+
+                asyncio.set_event_loop(loop)
+
+                result = loop.run_until_complete(
+                    process_query(user_input)
+                )
+
+                st.markdown("### Response")
+
+                st.write(result)
+
+            except Exception as e:
+
+                st.error(str(e))
+                st.error(type(e).__name__)
