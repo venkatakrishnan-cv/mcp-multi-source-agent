@@ -1,61 +1,53 @@
-````markdown
 # 🔌 MCP Multi-Source Data Agent
 
-An AI-powered multi-tool assistant built using the **Model Context Protocol (MCP)**, **Google Gemini**, and **Streamlit**.
+An AI-powered assistant built using:
 
-This project demonstrates how Large Language Models can dynamically discover and use external tools through MCP instead of relying purely on internal knowledge.
+- MCP (Model Context Protocol)
+- Google Gemini
+- Streamlit
+
+This project demonstrates how LLMs can dynamically discover and use external tools through MCP instead of relying only on internal knowledge.
 
 ---
 
-# 🚀 Features
+## 🚀 Features
 
 - 🌤️ Live Weather Information
-- 💱 Real-time Currency Conversion
+- 💱 Currency Conversion
 - 📰 Latest News Headlines
 - 🔌 MCP-based Tool Architecture
 - 🤖 Gemini Function Calling
 - ⚡ Async Tool Execution
 - 🧠 Dynamic Tool Discovery
-- 🛠️ Debuggable Tool Calls
-- 🎯 Forced MCP Tool Usage
+- 🛠️ MCP Tool Debugging
 - 🖥️ Streamlit UI
 
 ---
 
-# 🏗️ Architecture
+## 🏗️ Architecture
 
 ```text
 User Query
-    │
-    ▼
-Streamlit Frontend
-    │
-    ▼
-Gemini AI Model
-    │
-    ▼
-MCP Tool Discovery
-    │
-    ▼
+    ↓
+Streamlit UI
+    ↓
+Gemini AI
+    ↓
+MCP Tool Selection
+    ↓
 MCP Servers
- ┌─────────────┬─────────────┬─────────────┐
- │ Weather     │ Exchange    │ News        │
- │ Server      │ Server      │ Server      │
- └─────────────┴─────────────┴─────────────┘
-    │
-    ▼
+ ├── Weather Server
+ ├── Exchange Server
+ └── News Server
+    ↓
 Tool Response
-    │
-    ▼
+    ↓
 Gemini Final Answer
-    │
-    ▼
-Streamlit Output
-````
+```
 
 ---
 
-# 📂 Project Structure
+## 📂 Project Structure
 
 ```text
 .
@@ -70,34 +62,27 @@ Streamlit Output
 
 ---
 
-# 🧠 How MCP Works Here
+## 🧠 How It Works
 
-Instead of hardcoding APIs directly into the chatbot:
-
-1. Each capability is exposed as an MCP server
-2. The AI dynamically discovers tools using:
-
-   ```python
-   list_tools()
-   ```
-3. Gemini decides which tool to call
-4. MCP executes the tool
-5. The tool response is returned back to Gemini
-6. Gemini generates the final response
-
-This creates a modular AI-agent architecture.
+1. Streamlit launches the UI.
+2. MCP servers start using stdio transport.
+3. Gemini dynamically discovers available tools.
+4. Gemini decides which tool to call.
+5. MCP executes the tool.
+6. Tool response is returned to Gemini.
+7. Final answer is displayed in Streamlit.
 
 ---
 
-# 🛠️ MCP Tools
+## 🛠️ MCP Tools
 
-## 🌤️ Weather Tool
+### 🌤️ Weather Tool
 
 ```python
 get_weather(city)
 ```
 
-### Example
+Example:
 
 ```text
 What's the weather in Tokyo?
@@ -105,13 +90,13 @@ What's the weather in Tokyo?
 
 ---
 
-## 💱 Currency Conversion Tool
+### 💱 Currency Conversion Tool
 
 ```python
 convert_currency(amount, from, to)
 ```
 
-### Example
+Example:
 
 ```text
 Convert 100 USD to INR
@@ -119,13 +104,13 @@ Convert 100 USD to INR
 
 ---
 
-## 📰 News Tool
+### 📰 News Tool
 
 ```python
 get_top_headlines(country, category)
 ```
 
-### Example
+Example:
 
 ```text
 Show top technology news in India
@@ -133,9 +118,9 @@ Show top technology news in India
 
 ---
 
-# ⚙️ Installation
+## ⚙️ Installation
 
-## 1️⃣ Clone Repository
+### 1. Clone Repository
 
 ```bash
 git clone <your_repo_url>
@@ -144,16 +129,16 @@ cd <project_folder>
 
 ---
 
-## 2️⃣ Create Virtual Environment
+### 2. Create Virtual Environment
 
-### Windows
+#### Windows
 
 ```bash
 python -m venv venv
 venv\Scripts\activate
 ```
 
-### Linux / Mac
+#### Linux / Mac
 
 ```bash
 python3 -m venv venv
@@ -162,7 +147,7 @@ source venv/bin/activate
 
 ---
 
-## 3️⃣ Install Dependencies
+### 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -170,15 +155,15 @@ pip install -r requirements.txt
 
 ---
 
-# 🔑 Gemini API Setup
+## 🔑 Gemini API Setup
 
-Create a Gemini API key from:
+Get your API key from:
 
-[https://aistudio.google.com](https://aistudio.google.com)
+https://aistudio.google.com
 
 ---
 
-# 📄 Environment Variables
+## 📄 .env File
 
 Create a `.env` file:
 
@@ -188,7 +173,7 @@ GEMINI_API_KEY=your_api_key_here
 
 ---
 
-# ▶️ Run Application
+## ▶️ Run the Application
 
 ```bash
 streamlit run app.py
@@ -196,7 +181,7 @@ streamlit run app.py
 
 ---
 
-# 💬 Example Queries
+## 💬 Example Queries
 
 ```text
 What's the weather in Tokyo?
@@ -216,23 +201,19 @@ What's the weather in Chennai and convert 100 USD to INR
 
 ---
 
-# 🔍 MCP Debugging
+## 🔍 MCP Debugging
 
-The application shows:
+The app displays:
 
-* Which MCP tool was called
-* Tool arguments
-* Raw MCP response
+- Tool name used
+- Tool arguments
+- Raw MCP response
 
-This helps verify:
-
-* Gemini is actually using MCP
-* No hallucinated answers
-* Proper tool orchestration
+This helps verify that Gemini is actually using MCP tools.
 
 ---
 
-# 📦 requirements.txt
+## 📦 requirements.txt
 
 ```text
 streamlit
@@ -244,98 +225,37 @@ mcp
 
 ---
 
-# 🧪 Tech Stack
+## 🧪 Tech Stack
 
-| Technology | Purpose         |
-| ---------- | --------------- |
-| Python     | Backend         |
-| Streamlit  | Frontend UI     |
-| Gemini API | LLM             |
-| MCP        | Tool Protocol   |
-| AsyncIO    | Async Execution |
-| HTTPX      | API Requests    |
-
----
-
-# 🔥 Key Learning Concepts
-
-This project demonstrates:
-
-* MCP (Model Context Protocol)
-* AI Agents
-* Tool Calling
-* Function Calling
-* Async Python
-* Multi-tool orchestration
-* LLM routing
-* Dynamic tool discovery
+| Technology | Purpose |
+|---|---|
+| Python | Backend |
+| Streamlit | Frontend |
+| Gemini API | LLM |
+| MCP | Tool Protocol |
+| AsyncIO | Async Execution |
+| HTTPX | API Requests |
 
 ---
 
-# 🚀 Future Improvements
+## 🚀 Future Improvements
 
-* Add memory support
-* Add vector database
-* Add RAG pipeline
-* Add authentication
-* Add Docker deployment
-* Add chat history
-* Add voice input
-* Add multi-agent collaboration
-* Add local LLM support
+- Add memory support
+- Add vector database
+- Add RAG pipeline
+- Add Docker deployment
+- Add authentication
+- Add voice input
+- Add multi-agent support
 
 ---
 
-# 📸 Example Workflow
-
-```text
-User:
-"What's the weather in Tokyo?"
-
-        ↓
-
-Gemini decides:
-Call get_weather(city="Tokyo")
-
-        ↓
-
-MCP Weather Server executes
-
-        ↓
-
-Returns weather data
-
-        ↓
-
-Gemini summarizes response
-
-        ↓
-
-Streamlit displays answer
-```
-
----
-
-# 📜 License
+## 📜 License
 
 MIT License
 
 ---
 
-# 🙌 Acknowledgements
+## ⭐ Support
 
-Built using:
-
-* Streamlit
-* Google Gemini
-* Model Context Protocol (MCP)
-* Python AsyncIO
-
----
-
-# ⭐ If You Like This Project
-
-Give it a ⭐ on GitHub and feel free to contribute.
-
-```
-```
+If you like this project, give it a star on GitHub.
